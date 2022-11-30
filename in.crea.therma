@@ -1,0 +1,174 @@
+#
+units real
+
+log   therma.log
+
+#atom_style molecular
+
+read_restart final.restart
+
+#read_data final.data
+
+#read_restart final.restart #1K
+change_box all z delta -10. 200. units box
+
+molecule palla1 np3.txt 
+molecule palla2 np3.txt
+
+region gun00 block  EDGE EDGE EDGE EDGE 40 180 units box
+region gun01 block  EDGE EDGE EDGE EDGE 40 180 units box
+
+create_atoms 0 random 10  274510 gun00 mol palla1 573943
+create_atoms 0 random 0  16349321 gun00 mol palla2 937245 
+
+group 1NPs id <>  18001 18920
+group 1NPb id <>  74302 284992
+group 1NP union 1NPb 1NPs
+
+group substrato subtract all  1NP
+
+pair_style     lj/cut 8
+pair_coeff * * 5.29 2.62904
+
+
+neigh_modify check yes
+#---------------------------------
+#  VELOCITY
+#---------------------------------
+variable vel_in_eV_big  equal  0.055
+variable vel_in_eV_small  equal  0.055
+
+
+variable eV2J    equal   1.60219e-19
+#variable kcal2J  equal   6.94791847354727e-21
+variable amu2Kg  equal   1.6605402e-27
+##  [m/s] to [A/ps] 10+10/10+12
+##variable si2metal equal  1.0e-2
+variable si2real equal  1.0e-5
+##variable group_vel equal  ${si2real}*sqrt(((2.0*${vel_in_eV})*${eV2J})/(1131429.5498*${amu2Kg}))
+variable group_vel_big equal  ${si2real}*sqrt(((2.0*${vel_in_eV_big})*${eV2J})/(196.97*${amu2Kg}))
+variable group_vel_z_big equal  ${group_vel_big}
+
+variable group_vel_small equal  ${si2real}*sqrt(((2.0*${vel_in_eV_small})*${eV2J})/(196.97*${amu2Kg}))
+variable group_vel_z_small equal  ${group_vel_small}
+print  ${group_vel_z_small}
+
+variable group_vel_y equal  0.0
+
+
+
+# Defining simulation parameters
+#-------------------------------
+timestep        5
+
+# Defining compute
+#---------------------------------
+#variable  temp atom c_ke/(1.5*8.617*10^-5)
+variable  temp atom c_ke/(1.5*0.0019872041)
+
+compute Tfix  fissi temp
+compute Thot  caldi temp
+compute Tcold freddi temp
+compute Tsph1  1NP temp
+compute Tsub  substrato temp
+
+#-----------------------------------
+# Defining the output format (ie. customize thermo_style)
+#-----------------------------------
+thermo 10
+thermo_style  custom  step temp c_Tfix c_Thot c_Tcold c_Tsph1 c_Tsub pe etotal  spcpu
+
+write_data created.data
+###################################################
+# SIMULATIONS
+##################################################
+minimize 1.0e-4 1.0e-6 100 1000
+reset_timestep 0
+
+fix WR all nve/limit 0.1
+
+dump 1      all    xyz 1 all.xyz
+dump 1s     1NP    xyz 1 small.xyz
+dump 1a     fissi  xyz 1 fissi.xyz 
+dump 1b     caldi  xyz 1 caldi.xyz 
+dump 1c     freddi xyz 1 freddi.xyz 
+run 0
+undump 1
+undump 1s
+undump 1a
+undump 1b
+undump 1c
+unfix WR
+
+fix WR2 all nve/limit 0.1
+dump 2 all dcd 10 limit.dcd
+dump 3 fissi dcd 10 fissi.dcd
+dump 4 caldi dcd 10 caldi.dcd
+dump 5 freddi dcd 10 freddi.dcd
+run 12000
+undump 2
+undump 3
+undump 4
+undump 5
+unfix WR2
+
+write_restart restart.limit
+
+#fix RR 1NP rigid/nve molecule mol palla
+#fix 1 1NP rigid group 6 sph1 sph2 sph3 sph4 sph5 sph6
+#dump 2 all dcd 1 test.dcd
+#run 100
+#undump 2 
+#unfix RR
+
+#-----------------
+# THERMALIZE  ALL
+#-----------------
+
+velocity     fissi   create 0.0 3452 dist gaussian
+velocity     caldi   create 300.0 3452 dist gaussian
+velocity     freddi  create 300.0 3452 dist gaussian
+velocity     1NP     create 300.0 3452 dist gaussian
+
+fix       FR1   fissi setforce 0.0 0.0 0.0
+
+fix     TERM_FIX  caldi temp/rescale 1 300.0 300.0 1.0 1.0
+fix     TERM_FIX2  freddi  temp/rescale 1 300.0 300.0 1.0 1.0
+fix     TERM_CLUS  1NP temp/rescale 1 300.0 300.0 1.0 1.0
+
+fix nve1 caldi nve
+fix nve2 freddi nve
+fix nve3 1NP nve
+
+dump t1 all dcd 1 therma.300K.dcd
+restart 1000 therma.restart.1 therma.restart.2
+
+run 50000
+
+undump t1
+unfix TERM_FIX2
+unfix TERM_CLUS
+unfix nve3
+write_restart restart.thermalized
+write_data data.thermalized
+#-------------------------
+# PART 2 IMPACT
+#-------------------------
+velocity  1NP  set  0.0 0.0 -0.005 units box  sum yes
+
+fix NVEI3 1NP nve
+
+dump d1 all xyz 1000 traj.xyz
+
+restart 100  deposit.restart.1 deposit.restart.2
+
+run     200000
+undump d1
+
+unfix     NVEI4
+unfix     FR1  
+unfix     TERM_FIX 
+unfix     CLUST_FIX1 
+unfix     CLUST_FIX2 
+unfix     CLUST_FIX3 
+unfix     FREDDI 
