@@ -1,0 +1,93 @@
+########################################################
+# 
+# Defining the units
+#-------------------------------------------------------
+units           real
+#
+# Defining atom style and boundary conditions
+#-------------------------------------------------------
+atom_style      atomic
+boundary        p p p
+#
+#
+# Defining the unit box
+#-------------------------------------------------------
+lattice         fcc  4.0782
+region          simulbox block 0 30 0 30 0 5
+create_box      1 simulbox
+create_atoms    1 region simulbox
+#
+#########################################################
+
+thermo 100
+
+
+######### MAKING THE SLAB ###############################
+#
+# Replicating the box
+#--------------------------------------------------------
+#replicate  3 3 1
+#
+#
+# Enlarging the box in one direction
+#--------------------------------------------------------
+#change_box all z final 0.0 50.0
+#
+#
+# Defining regions and groups
+#--------------------------------------------------------
+
+
+region LowerRegion block EDGE  EDGE EDGE EDGE 0.0 2.5 units box
+group fissi region LowerRegion
+#
+region MediumRegion block EDGE EDGE EDGE EDGE 2.6 10 units box
+group caldi region MediumRegion
+#
+region UpperRegion block EDGE EDGE EDGE EDGE 10.1 21 units box
+group freddi region UpperRegion 
+#
+#########################################################
+
+
+
+
+#########################################################
+#
+# Defining atom type
+#--------------------------------------------------------
+mass  1  196.97
+#
+# Defining interaction potential
+#--------------------------------------------------------
+pair_style     lj/cut 8
+pair_coeff * * 5.29 2.62904
+
+#
+# The values of ε and σ here used are taken from
+#
+# Heinz, Vaia, Farmer, and Naik (2008)
+# J. Phys. Chem. C 2008, 112, 17281–17290
+#
+# where the value of ε in kcal/mol (not eV as above)
+# and r0 in Ang (not σ as above) for Au are reported
+# in Table I (12-6 LJ potential).
+# To go from r0 to σ compare their eqn (1)
+# with first equation of the webpage
+# of LAMMPS implementation of the 12-6LJ potential:
+#
+# https://lammps.sandia.gov/doc/pair_lj.html
+#
+# Defining timestep
+#--------------------------------------------------------
+#
+timestep        1
+#
+#########################################################
+minimize 1.0e-4 1.0e-6 100 1000
+dump 1 all xyz 1000 pippo.xyz
+velocity all create 300.0 4928459 rot yes dist gaussian
+fix 1 all nvt temp 300 300 100
+run 100000
+write_restart final.restart 
+write_data    final.data
